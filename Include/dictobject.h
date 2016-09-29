@@ -32,6 +32,9 @@ typedef struct {
 
     PyDictKeysObject *ma_keys;
 
+	// Flag to determine if the dictionary entries must be shuffled. True after editing.
+	char IsShuffled;
+
     /* If ma_values is NULL, the table is "combined": keys and values
        are stored in ma_keys.
 
