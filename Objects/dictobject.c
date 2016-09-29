@@ -506,7 +506,7 @@ _PyDict_CheckConsistency(PyDictObject *mp)
 
 static PyDictKeysObject *new_keys_object(Py_ssize_t size)
 {
-    PyDictKeysObject *dk;
+    PyDictKeysObject *dk;		// PyDictKeysObject Definition-- sorta?
     Py_ssize_t es, usable;
 
     assert(size >= PyDict_MINSIZE);
@@ -590,6 +590,10 @@ new_dict(PyDictKeysObject *keys, PyObject **values)
             return NULL;
         }
     }
+
+	// Hackity-hack-hack-hack
+	mp->IsShuffled = 0;
+
     mp->ma_keys = keys;
     mp->ma_values = values;
     mp->ma_used = 0;
@@ -1101,6 +1105,9 @@ Returns -1 if an error occurred, or 0 on success.
 static int
 insertdict(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject *value)
 {
+	// Hackity-hack-hack
+	mp->IsShuffled = 0;
+
     PyObject *old_value;
     PyObject **value_addr;
     PyDictKeyEntry *ep, *ep0;
@@ -1299,6 +1306,10 @@ dictresize(PyDictObject *mp, Py_ssize_t minused)
         assert(oldkeys->dk_refcnt == 1);
         DK_DEBUG_DECREF PyObject_FREE(oldkeys);
     }
+
+	// Hackity-hack-hack
+	mp->IsShuffled = 0;
+
     return 0;
 }
 
@@ -1684,14 +1695,38 @@ PyDict_Clear(PyObject *op)
     assert(_PyDict_CheckConsistency(mp));
 }
 
+static inline void
+hack_CopyKeys(PyDictKeysObject* keys, Py_ssize_t dest, Py_ssize_t src) {
+	dk_set_index(keys, dest, src);
+}
+
+static inline void
+hack_shuffle(PyDictKeysObject* keys)
+{
+	Py_ssize_t size = keys->dk_size;
+	if (size > 1)
+	{
+		Py_ssize_t i;
+		int32_t t;
+		for (i = 0; i < size - 1; i++)
+		{
+			Py_ssize_t j = i + rand() / (RAND_MAX / (size - i) + 1);
+			t = dk_get_index(keys, j);
+			hack_CopyKeys(keys, i, j);
+			hack_CopyKeys(keys, j, t);
+		}
+	}
+	
+}
+
 /* Returns -1 if no more items (or op is not a dict),
  * index of item otherwise. Stores value in pvalue
  */
 static inline Py_ssize_t
-dict_next(PyObject *op, Py_ssize_t i, PyObject **pvalue)
+dict_next(PyObject *op, Py_ssize_t i, PyObject **pvalue)		// i = Current table index
 {
     Py_ssize_t n;
-    PyDictObject *mp;
+    PyDictObject *mp;		// Points to dictionary
     PyObject **value_ptr = NULL;
 
     if (!PyDict_Check(op))
@@ -1701,10 +1736,18 @@ dict_next(PyObject *op, Py_ssize_t i, PyObject **pvalue)
         return -1;
 
     n = mp->ma_keys->dk_nentries;
+	
+	// Inserted
+	if (mp->IsShuffled == 0) {
+		hack_shuffle(mp->ma_keys);
+		mp->IsShuffled = 1;
+	}
+	// /Inserted
+
     if (mp->ma_values) {
         for (; i < n; i++) {
             value_ptr = &mp->ma_values[i];
-            if (*value_ptr != NULL)
+            if (*value_ptr != NULL)		// If a valid entry has been found in the hash table, end search
                 break;
         }
     }
@@ -1716,7 +1759,7 @@ dict_next(PyObject *op, Py_ssize_t i, PyObject **pvalue)
                 break;
         }
     }
-    if (i >= n)
+    if (i >= n)		// No valid keys remain
         return -1;
     if (pvalue)
         *pvalue = *value_ptr;
@@ -1777,6 +1820,9 @@ _PyDict_Next(PyObject *op, Py_ssize_t *ppos, PyObject **pkey,
 PyObject *
 _PyDict_Pop(PyDictObject *mp, PyObject *key, PyObject *deflt)
 {
+	// Hackity-hack-hack
+	mp->IsShuffled = 0;
+
     Py_hash_t hash;
     Py_ssize_t ix, hashpos;
     PyObject *old_value, *old_key;
@@ -2809,6 +2855,9 @@ dict_clear(PyDictObject *mp)
 static PyObject *
 dict_pop(PyDictObject *mp, PyObject *args)
 {
+	// Hackity-hack-hack
+	mp->IsShuffled = 0;
+
     PyObject *key, *deflt = NULL;
 
     if(!PyArg_UnpackTuple(args, "pop", 1, 2, &key, &deflt))
@@ -2820,6 +2869,9 @@ dict_pop(PyDictObject *mp, PyObject *args)
 static PyObject *
 dict_popitem(PyDictObject *mp)
 {
+	// Hackity-hack-hack
+	mp->IsShuffled = 0;
+
     Py_ssize_t i, j;
     PyDictKeyEntry *ep0, *ep;
     PyObject *res;
